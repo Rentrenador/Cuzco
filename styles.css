@@ -2686,6 +2686,20 @@ body {
   .evento-cliente-picker {
     max-width: calc(100vw - 16px);
   }
+
+  .sidebar-footer #btn-exportar,
+  .sidebar-footer .import-label {
+    display: none;
+  }
+
+  .sidebar-footer {
+    flex-direction: column;
+  }
+
+  .sidebar-footer #btn-logout {
+    width: 100%;
+    justify-content: center;
+  }
 }
 
 @media (max-width: 480px) {
