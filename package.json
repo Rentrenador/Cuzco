@@ -1,0 +1,9 @@
+{
+  "name": "cuzco",
+  "private": true,
+  "description": "Gestión de clientes — app estática con Supabase",
+  "scripts": {
+    "build": "node scripts/generate-config.js",
+    "start": "python -m http.server 3456"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "name": "Cuzco — Gestión de Clientes",
+  "short_name": "Cuzco",
+  "description": "Gestión de clientes y equipo para profesionales",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f3ef",
+  "theme_color": "#c45c3e",
+  "lang": "es",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

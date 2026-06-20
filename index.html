@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#c45c3e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Cuzco">
+  <title>Cuzco — Gestión de Clientes</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="styles.css?v=39">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=DM+Serif+Display&display=swap" rel="stylesheet">
+</head>
+<body>
+  <noscript>
+    <p style="padding:1rem;background:#fef2f2;color:#dc2626;text-align:center;">
+      Activa JavaScript para usar Cuzco.
+    </p>
+  </noscript>
+
+  <div class="auth-status-banner hidden" id="auth-status-banner" role="status"></div>
+
+  <!-- Pantalla de acceso -->
+  <div class="auth-screen" id="auth-screen">
+    <div class="auth-card">
+      <header class="auth-header">
+        <h1 class="logo">Cuzco</h1>
+        <p class="logo-sub">Gestión de clientes por profesional</p>
+      </header>
+
+      <div class="auth-panels">
+        <input type="radio" name="auth-tab" id="tab-login" class="auth-tab-input" checked>
+        <input type="radio" name="auth-tab" id="tab-register" class="auth-tab-input">
+
+        <div class="auth-tabs">
+          <label for="tab-login" class="auth-tab">Iniciar sesión</label>
+          <label for="tab-register" class="auth-tab">Crear cuenta</label>
+        </div>
+
+        <form class="auth-form auth-panel-login" id="form-login" autocomplete="on" onsubmit="event.preventDefault(); window.cuzcoLogin && window.cuzcoLogin(event);">
+          <div class="field">
+            <label for="login-email">Email</label>
+            <input type="email" id="login-email" name="email" required placeholder="tu@email.com" autocomplete="username">
+          </div>
+          <div class="field">
+            <label for="login-password">Contraseña</label>
+            <div class="password-field">
+              <input type="password" id="login-password" name="password" required placeholder="••••••••" autocomplete="current-password">
+              <button type="button" class="btn-toggle-password" data-target="login-password" aria-label="Mostrar contraseña" onclick="window.cuzcoTogglePwd && window.cuzcoTogglePwd(this)">Ver</button>
+            </div>
+          </div>
+          <p class="auth-forgot-link">
+            <button type="button" class="auth-link" id="btn-show-forgot">Cambiar contraseña</button>
+          </p>
+          <p class="auth-error hidden" id="login-error"></p>
+          <button type="submit" class="btn btn-primary btn-block" id="btn-login-submit">Entrar</button>
+        </form>
+
+        <div class="auth-form auth-panel-forgot hidden" id="panel-forgot">
+          <h3 class="auth-panel-title">Cambiar contraseña</h3>
+          <p class="auth-panel-desc">Te enviaremos un enlace a tu email para elegir una contraseña nueva.</p>
+          <div class="field">
+            <label for="forgot-email">Email</label>
+            <input type="email" id="forgot-email" name="email" placeholder="tu@email.com" autocomplete="username">
+          </div>
+          <p class="auth-success hidden" id="forgot-success"></p>
+          <p class="auth-error hidden" id="forgot-error"></p>
+          <button type="button" class="btn btn-primary btn-block" id="btn-forgot-enviar">Enviar enlace</button>
+          <button type="button" class="auth-link auth-link-block" id="btn-forgot-volver">Volver al inicio de sesión</button>
+        </div>
+
+        <div class="auth-form auth-panel-reset hidden" id="panel-reset-password">
+          <h3 class="auth-panel-title">Nueva contraseña</h3>
+          <p class="auth-panel-desc">Elige una contraseña nueva para tu cuenta.</p>
+          <div class="field">
+            <label for="reset-password">Nueva contraseña</label>
+            <div class="password-field">
+              <input type="password" id="reset-password" name="new-password" minlength="6" placeholder="Mínimo 6 caracteres" autocomplete="new-password">
+              <button type="button" class="btn-toggle-password" data-target="reset-password" aria-label="Mostrar contraseña" onclick="window.cuzcoTogglePwd && window.cuzcoTogglePwd(this)">Ver</button>
+            </div>
+          </div>
+          <p class="auth-error hidden" id="reset-error"></p>
+          <button type="button" class="btn btn-primary btn-block" id="btn-reset-guardar">Guardar contraseña</button>
+          <button type="button" class="auth-link auth-link-block" id="btn-reset-volver">Volver al inicio de sesión</button>
+        </div>
+
+        <form class="auth-form auth-panel-register" id="form-register" autocomplete="on" novalidate onsubmit="event.preventDefault(); window.cuzcoRegistrar && window.cuzcoRegistrar(event);">
+          <div class="field">
+            <label for="register-nombre">Tu nombre</label>
+            <input type="text" id="register-nombre" name="name" required placeholder="Ana García" autocomplete="name">
+          </div>
+          <div class="field">
+            <label for="register-email">Email</label>
+            <input type="email" id="register-email" name="email" required placeholder="tu@email.com" autocomplete="username">
+            <p class="field-hint hidden" id="register-email-hint" role="status">
+              Ya existe una cuenta con este email.
+              <button type="button" class="auth-link" id="btn-register-go-login">Inicia sesión</button>
+            </p>
+          </div>
+          <div class="field">
+            <label for="register-password">Contraseña</label>
+            <div class="password-field">
+              <input type="password" id="register-password" name="new-password" required minlength="6" placeholder="Mínimo 6 caracteres" autocomplete="new-password">
+              <button type="button" class="btn-toggle-password" data-target="register-password" aria-label="Mostrar contraseña" onclick="window.cuzcoTogglePwd && window.cuzcoTogglePwd(this)">Ver</button>
+            </div>
+          </div>
+          <p class="auth-error hidden" id="register-error"></p>
+          <p class="auth-success hidden" id="register-success"></p>
+          <button type="submit" class="btn btn-primary btn-block" id="btn-register-submit">Crear cuenta</button>
+        </form>
+      </div>
+
+      <div class="auth-setup hidden" id="auth-setup">
+        <h3 class="setup-title">Activar confirmación por email</h3>
+        <p>Para que cada nuevo usuario reciba un email en su Gmail al crear la cuenta, conecta un proyecto <strong>Supabase</strong> (gratis):</p>
+        <ol class="setup-steps">
+          <li>Crea un proyecto en <a href="https://supabase.com/dashboard" target="_blank" rel="noopener">supabase.com</a></li>
+          <li>En <strong>SQL Editor</strong>, ejecuta el archivo <code>supabase-schema.sql</code></li>
+          <li>En <strong>Authentication → Providers → Email</strong>, activa <em>Confirm email</em></li>
+          <li>En <strong>Authentication → URL Configuration</strong>, pon <em>Site URL</em>: <code id="setup-site-url">http://localhost:3456</code></li>
+          <li>En <strong>Settings → API</strong>, copia <em>Project URL</em> (ej. <code>https://xxxxx.supabase.co</code>) y la clave <em>anon public</em></li>
+        </ol>
+        <div class="setup-form">
+          <div class="field">
+            <label for="setup-url">Project URL (no la URL del dashboard)</label>
+            <input type="url" id="setup-url" placeholder="https://cixqdloabixapidlmchv.supabase.co">
+          </div>
+          <div class="field">
+            <label for="setup-key">Clave anon public</label>
+            <input type="text" id="setup-key" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
+          </div>
+          <p class="auth-error hidden" id="setup-error"></p>
+          <button type="button" class="btn btn-primary btn-block" id="btn-setup-guardar">Conectar Supabase</button>
+        </div>
+        <p class="setup-note">También puedes pegar estos datos en <code>config.js</code>. Sin Supabase, las cuentas solo se guardan en este navegador y no se envía ningún email.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Aplicación principal -->
+  <div class="app hidden" id="app">
+    <div class="sidebar-overlay hidden" id="sidebar-overlay" aria-hidden="true"></div>
+    <aside class="sidebar" id="sidebar">
+      <header class="sidebar-header">
+        <h1 class="logo">Cuzco</h1>
+        <p class="logo-sub">Gestión de clientes</p>
+      </header>
+
+      <div class="user-panel">
+        <div class="user-avatar" id="user-avatar">?</div>
+        <div class="user-info">
+          <span class="user-name" id="user-name">Usuario</span>
+          <span class="user-email" id="user-email"></span>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <button type="button" class="nav-item active" id="nav-dashboard">
+          <span class="nav-icon">▦</span> Vista general
+        </button>
+        <button type="button" class="nav-item" id="nav-detalle">
+          <span class="nav-icon">◎</span> Ficha detalle
+        </button>
+        <button type="button" class="nav-item" id="nav-equipo">
+          <span class="nav-icon">⊞</span> Equipo
+        </button>
+      </nav>
+
+      <button type="button" class="btn btn-primary btn-block" id="btn-nuevo-cliente">
+        <span class="btn-icon">+</span> Nuevo cliente
+      </button>
+
+      <nav class="client-list" id="client-list" aria-label="Lista de clientes"></nav>
+
+      <footer class="sidebar-footer">
+        <button type="button" class="btn btn-ghost btn-sm" id="btn-exportar">Exportar</button>
+        <label class="btn btn-ghost btn-sm import-label">
+          Importar
+          <input type="file" id="input-importar" accept=".json" hidden>
+        </label>
+        <button type="button" class="btn btn-ghost btn-sm" id="btn-logout">Salir</button>
+      </footer>
+    </aside>
+
+    <main class="main" id="main-content">
+      <header class="mobile-topbar" id="mobile-topbar">
+        <button type="button" class="btn-mobile-menu" id="btn-mobile-menu" aria-label="Abrir menú" aria-expanded="false" aria-controls="sidebar">☰</button>
+        <span class="mobile-topbar-title" id="mobile-topbar-title">Vista general</span>
+      </header>
+
+      <!-- Vista equipo -->
+      <section class="equipo-view hidden" id="equipo-view">
+        <div id="equipo-paso-miembros">
+          <header class="equipo-view-header">
+            <div>
+              <button type="button" class="btn-back" id="btn-volver-dashboard-equipo">← Vista general</button>
+              <h2>Miembros del equipo</h2>
+              <p class="equipo-view-sub">Selecciona un miembro para ver su cartera completa</p>
+            </div>
+          </header>
+          <div class="equipo-miembros-lista" id="equipo-miembros-lista" aria-label="Miembros del equipo"></div>
+        </div>
+
+        <section class="dashboard equipo-miembro-dashboard hidden" id="equipo-miembro-dashboard">
+          <header class="dashboard-header">
+            <div>
+              <button type="button" class="btn-back" id="btn-volver-miembros-equipo">← Miembros del equipo</button>
+              <h2 id="equipo-miembro-dashboard-titulo">Cartera del miembro</h2>
+              <p class="dashboard-sub" id="equipo-miembro-dashboard-sub">Calendario, facturación y clientes</p>
+            </div>
+            <div class="dashboard-actions">
+              <input type="search" class="search-input" id="equipo-dashboard-search" placeholder="Buscar cliente…">
+              <span class="client-count" id="equipo-client-count">0 clientes</span>
+            </div>
+          </header>
+
+          <div class="dashboard-top-grid" id="equipo-dashboard-top-grid">
+            <div class="global-calendar-block" id="equipo-global-calendar-block">
+              <header class="global-calendar-header">
+                <div>
+                  <h3 class="global-calendar-heading">Calendario global</h3>
+                  <p class="global-calendar-sub" id="equipo-global-calendar-hint">Clic en evento de la leyenda → asigna cliente (0,5 s) → arrastra al día</p>
+                </div>
+                <div class="global-calendar-nav">
+                  <button type="button" class="btn btn-ghost btn-sm btn-cal-nav" id="equipo-btn-cal-prev" aria-label="Mes anterior">←</button>
+                  <span class="global-calendar-month" id="equipo-global-calendar-title"></span>
+                  <button type="button" class="btn btn-ghost btn-sm btn-cal-nav" id="equipo-btn-cal-next" aria-label="Mes siguiente">→</button>
+                </div>
+              </header>
+              <div class="global-calendar-legend" id="equipo-global-calendar-legend"></div>
+              <div class="global-calendar-container" id="equipo-global-calendar-container"></div>
+            </div>
+
+            <aside class="equipo-panel" id="equipo-panel-miembro" aria-label="Facturación y objetivos del miembro"></aside>
+          </div>
+
+          <div class="table-wrap" id="equipo-table-wrap">
+            <table class="overview-table" id="equipo-overview-table">
+              <thead>
+                <tr>
+                  <th>Cliente</th>
+                  <th>Bono</th>
+                  <th>Contratación (3 meses)</th>
+                  <th>Sesiones</th>
+                  <th>Horario</th>
+                  <th>PDF 1</th>
+                  <th>PDF 2</th>
+                  <th>Ejercicios</th>
+                  <th>Pesos</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="equipo-overview-body"></tbody>
+            </table>
+          </div>
+
+          <div class="empty-state hidden" id="equipo-dashboard-empty">
+            <div class="empty-icon">▦</div>
+            <h2>Sin clientes</h2>
+            <p>Este miembro no tiene clientes registrados todavía.</p>
+          </div>
+        </section>
+      </section>
+
+      <!-- Vista general -->
+      <section class="dashboard" id="dashboard">
+        <header class="dashboard-header">
+          <div>
+            <h2>Vista general</h2>
+            <p class="dashboard-sub">Todos tus clientes de un vistazo — sin entrar en cada ficha</p>
+          </div>
+          <div class="dashboard-actions">
+            <input type="search" class="search-input" id="dashboard-search" placeholder="Buscar cliente…">
+            <span class="client-count" id="client-count">0 clientes</span>
+          </div>
+        </header>
+
+        <div class="dashboard-top-grid" id="dashboard-top-grid">
+          <div class="global-calendar-block" id="global-calendar-block">
+            <header class="global-calendar-header">
+              <div>
+                <h3 class="global-calendar-heading">Calendario global</h3>
+                <p class="global-calendar-sub">Clic en evento de la leyenda → asigna cliente (0,5 s) → arrastra al día</p>
+              </div>
+              <div class="global-calendar-nav">
+                <button type="button" class="btn btn-ghost btn-sm btn-cal-nav" id="btn-cal-prev" aria-label="Mes anterior">←</button>
+                <span class="global-calendar-month" id="global-calendar-title"></span>
+                <button type="button" class="btn btn-ghost btn-sm btn-cal-nav" id="btn-cal-next" aria-label="Mes siguiente">→</button>
+              </div>
+            </header>
+            <div class="global-calendar-legend" id="global-calendar-legend"></div>
+            <div class="global-calendar-container" id="global-calendar-container"></div>
+          </div>
+
+          <aside class="equipo-panel" id="equipo-panel" aria-label="Métricas del equipo"></aside>
+        </div>
+
+        <div class="table-wrap">
+          <table class="overview-table" id="overview-table">
+            <thead>
+              <tr>
+                <th>Cliente</th>
+                <th>Bono</th>
+                <th>Contratación (3 meses)</th>
+                <th>Sesiones</th>
+                <th>Horario</th>
+                <th>PDF 1</th>
+                <th>PDF 2</th>
+                <th>Ejercicios</th>
+                <th>Pesos</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="overview-body"></tbody>
+          </table>
+        </div>
+
+        <div class="empty-state hidden" id="dashboard-empty">
+          <div class="empty-icon">▦</div>
+          <h2>Sin clientes todavía</h2>
+          <p>Crea tu primer cliente para verlo aquí en la vista general.</p>
+        </div>
+      </section>
+
+      <!-- Ficha detalle -->
+      <section class="detail-view hidden" id="detail-view">
+        <div class="empty-state" id="empty-state">
+          <div class="empty-icon">◎</div>
+          <h2>Sin cliente seleccionado</h2>
+          <p>Selecciona un cliente de la lista o créalo desde la vista general.</p>
+        </div>
+
+        <form class="client-form hidden" id="client-form" autocomplete="off">
+          <header class="form-header">
+            <div>
+              <button type="button" class="btn-back" id="btn-volver-dashboard">← Vista general</button>
+              <h2 id="form-title">Ficha de cliente</h2>
+            </div>
+            <div class="form-header-actions">
+              <button type="button" class="btn btn-primary btn-sm" id="btn-guardar-cliente">Guardar</button>
+              <button type="button" class="btn btn-danger btn-sm" id="btn-eliminar">Eliminar</button>
+            </div>
+          </header>
+
+          <section class="form-section">
+            <h3 class="section-title"><span class="section-num">1</span> Apellidos y nombre</h3>
+            <div class="field-row">
+              <div class="field">
+                <label for="apellidos">Apellidos</label>
+                <input type="text" id="apellidos" placeholder="García López">
+              </div>
+              <div class="field">
+                <label for="nombre">Nombre</label>
+                <input type="text" id="nombre" placeholder="María">
+              </div>
+            </div>
+          </section>
+
+          <section class="form-section">
+            <h3 class="section-title"><span class="section-num">2</span> Bono</h3>
+            <div class="field">
+              <label for="bono-modalidad">Modalidad</label>
+              <select id="bono-modalidad">
+                <option value="">— Seleccionar —</option>
+                <option value="planificacion">Solo planificación (50 €)</option>
+                <option value="entrenamiento-4sem">Entrenamiento personal — 4 semanas</option>
+              </select>
+            </div>
+            <div class="bono-extra hidden" id="bono-planificacion-fields">
+              <p class="bono-hint">Contratación de planificación únicamente, precio fijo de 50 €.</p>
+              <div class="field">
+                <label for="bono-coste-plan">Precio</label>
+                <input type="text" id="bono-coste-plan" value="50 €" readonly>
+              </div>
+            </div>
+            <div class="bono-extra hidden" id="bono-entrenamiento-fields">
+              <p class="bono-hint">Bono de 4 semanas de entrenamiento personal.</p>
+              <div class="field-row">
+                <div class="field">
+                  <label for="bono-sesiones-semana">Sesiones por semana</label>
+                  <select id="bono-sesiones-semana">
+                    <option value="">— Seleccionar —</option>
+                    <option value="1">1 sesión / semana</option>
+                    <option value="2">2 sesiones / semana</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="bono-duracion">Duración por sesión</label>
+                  <select id="bono-duracion">
+                    <option value="">— Seleccionar —</option>
+                    <option value="30">30 minutos</option>
+                    <option value="45">45 minutos</option>
+                    <option value="60">60 minutos</option>
+                  </select>
+                </div>
+              </div>
+              <div class="field">
+                <label for="bono-coste">Coste del bono (€)</label>
+                <input type="number" id="bono-coste" min="0" step="0.01" placeholder="0,00">
+              </div>
+            </div>
+          </section>
+
+          <section class="form-section">
+            <h3 class="section-title"><span class="section-num">3</span> Control de la contratación</h3>
+            <div class="field-row calendar-controls">
+              <div class="field">
+                <label for="mes-contratacion">Mes de contratación del periodo</label>
+                <input type="month" id="mes-contratacion">
+              </div>
+              <div class="field">
+                <label for="evento-detalle">Detalle del evento</label>
+                <input type="text" id="evento-detalle" placeholder="Ej. 30 minutos, entrega PDF…">
+              </div>
+            </div>
+            <div class="legend" id="calendar-legend">
+              <span class="legend-title">Clic en evento → elige cliente (0,5 s) → arrastra al día · Izq.: sin detalle · Der.: con detalle</span>
+              <div class="legend-item" data-tipo="renovacion-pagada" role="button" tabindex="0">
+                <span class="swatch" style="background:#1e3a8a"></span> Renov. pagada
+              </div>
+              <div class="legend-item" data-tipo="valoracion-entrenamiento" role="button" tabindex="0">
+                <span class="swatch" style="background:#2563eb"></span> Valoración
+              </div>
+              <div class="legend-item" data-tipo="renovacion-probable" role="button" tabindex="0">
+                <span class="swatch" style="background:#84cc16"></span> Renov. probable
+              </div>
+              <div class="legend-item" data-tipo="baja" role="button" tabindex="0">
+                <span class="swatch" style="background:#92400e"></span> Baja
+              </div>
+              <div class="legend-item active" data-tipo="entrenamiento" role="button" tabindex="0">
+                <span class="swatch" style="background:#dc2626"></span> Entrenamiento
+              </div>
+              <div class="legend-item" data-tipo="reserva" role="button" tabindex="0">
+                <span class="swatch" style="background:#9ca3af"></span> Reserva
+              </div>
+              <div class="legend-item" data-tipo="vacaciones-cliente" role="button" tabindex="0">
+                <span class="swatch" style="background:#f97316"></span> Vac. cliente
+              </div>
+              <div class="legend-item" data-tipo="vacaciones-entrenador" role="button" tabindex="0">
+                <span class="swatch swatch-split"></span> Vac. entrenador
+              </div>
+              <div class="legend-item" data-tipo="mod-pesos" role="button" tabindex="0">
+                <span class="swatch" style="background:#171717"></span> Mod. pesos
+              </div>
+              <div class="legend-item" data-tipo="mod-ejercicios" role="button" tabindex="0">
+                <span class="swatch" style="background:#171717"></span> Mod. ejercicios
+              </div>
+              <div class="legend-item" data-tipo="entrega-nutricion" role="button" tabindex="0">
+                <span class="swatch" style="background:#171717"></span> Nutrición
+              </div>
+              <div class="legend-item legend-item-borrar" data-tipo="borrar" role="button" tabindex="0">
+                <span class="swatch swatch-borrar"></span> Borrar día
+              </div>
+            </div>
+            <div class="calendar-container" id="calendar-container"></div>
+          </section>
+
+          <section class="form-section">
+            <h3 class="section-title"><span class="section-num">4</span> Sesiones <span class="badge">por hacer</span></h3>
+            <div class="todo-block">
+              <div class="todo-header">
+                <input type="number" id="sesiones-total" min="0" placeholder="Total sesiones" class="todo-total">
+                <span class="todo-progress" id="sesiones-progress">0 / 0 completadas</span>
+              </div>
+              <ul class="todo-list" id="sesiones-list"></ul>
+              <button type="button" class="btn btn-ghost btn-sm" id="btn-add-sesion">+ Añadir sesión</button>
+            </div>
+          </section>
+
+          <section class="form-section">
+            <h3 class="section-title"><span class="section-num">5</span> Confirmación horario semanal</h3>
+            <label class="checkbox-card">
+              <input type="checkbox" id="confirmacion-horario">
+              <span class="checkbox-label">Horario semanal confirmado</span>
+            </label>
+            <div class="field" style="margin-top: 0.75rem">
+              <label for="horario-notas">Notas del horario</label>
+              <textarea id="horario-notas" rows="2" placeholder="Lunes 10:00 · Miércoles 18:00…"></textarea>
+            </div>
+          </section>
+
+          <section class="form-section">
+            <h3 class="section-title"><span class="section-num">6</span> Entrega de PDF 1</h3>
+            <label class="checkbox-card">
+              <input type="checkbox" id="pdf1-entregado">
+              <span class="checkbox-label">PDF 1 entregado</span>
+            </label>
+            <div class="field" style="margin-top: 0.75rem">
+              <label for="pdf1-fecha">Fecha de entrega</label>
+              <input type="date" id="pdf1-fecha">
+            </div>
+          </section>
+
+          <section class="form-section">
+            <h3 class="section-title"><span class="section-num">7</span> Entrega de PDF 2</h3>
+            <label class="checkbox-card">
+              <input type="checkbox" id="pdf2-entregado">
+              <span class="checkbox-label">PDF 2 entregado</span>
+            </label>
+            <div class="field" style="margin-top: 0.75rem">
+              <label for="pdf2-fecha">Fecha de entrega</label>
+              <input type="date" id="pdf2-fecha">
+            </div>
+          </section>
+
+          <section class="form-section">
+            <h3 class="section-title"><span class="section-num">8</span> Modificación de ejercicios <span class="badge">por hacer</span></h3>
+            <ul class="todo-list" id="ejercicios-list"></ul>
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-add-ejercicio">+ Añadir tarea</button>
+          </section>
+
+          <section class="form-section">
+            <h3 class="section-title"><span class="section-num">9</span> Modificación de pesos <span class="badge">por hacer</span></h3>
+            <ul class="todo-list" id="pesos-list"></ul>
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-add-peso">+ Añadir tarea</button>
+          </section>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <div class="evento-cliente-picker hidden" id="evento-cliente-picker" role="dialog" aria-label="Asignar cliente al evento">
+    <div class="evento-picker-header">Asignar cliente</div>
+    <p class="evento-picker-hint">Mantén el evento 0,5 s sobre un cliente</p>
+    <ul class="evento-picker-list" id="evento-picker-list"></ul>
+  </div>
+
+  <div class="context-menu hidden" id="evento-context-menu" role="menu">
+    <div id="evento-context-menu-list"></div>
+  </div>
+
+  <div class="context-menu hidden" id="cliente-context-menu" role="menu">
+    <div class="context-menu-header" id="cliente-context-menu-title"></div>
+    <button type="button" class="context-menu-item" id="cliente-ctx-ver">Ver perfil</button>
+    <button type="button" class="context-menu-item context-menu-item-danger" id="cliente-ctx-eliminar">Eliminar perfil</button>
+  </div>
+
+  <div class="toast hidden" id="toast"></div>
+
+  <div class="evento-modal hidden" id="evento-modal" role="dialog" aria-modal="true" aria-labelledby="evento-modal-title">
+    <div class="evento-modal-backdrop" id="evento-modal-backdrop"></div>
+    <div class="evento-modal-card">
+      <h3 class="evento-modal-title" id="evento-modal-title">Nuevo evento</h3>
+      <p class="evento-modal-fecha" id="evento-modal-fecha"></p>
+      <div class="field">
+        <label for="evento-modal-detalle" id="evento-modal-label">Detalle</label>
+        <input type="text" id="evento-modal-detalle" placeholder="Información del evento" autocomplete="off">
+        <p class="evento-modal-hint hidden" id="evento-modal-hint"></p>
+      </div>
+      <div class="evento-modal-actions">
+        <button type="button" class="btn btn-ghost" id="evento-modal-cancelar">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="evento-modal-guardar">Añadir evento</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="vendor/supabase.min.js?v=33"></script>
+  <script src="config.js?v=33"></script>
+  <script src="app.js?v=34"></script>
+</body>
+</html>
