@@ -84,12 +84,15 @@ function uid() {
 function clienteVacio() {
   const hoy = new Date();
   const mes = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`;
+  const fechaHoy = formatFecha(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
   return {
     id: uid(),
     apellidos: '',
     nombre: '',
     bono: { modalidad: '', coste: '', sesionesSemanales: '', duracionMinutos: '' },
     mesContratacion: mes,
+    fechaContratacion: fechaHoy,
+    fechaRenovacionPrevista: '',
     calendario: {},
     sesiones: [],
     sesionesTotal: 0,
@@ -460,11 +463,17 @@ function sincronizarClienteEquipo(c) {
   else clientesEquipo.push(copy);
 }
 
+function sincronizarClienteDerivados(c) {
+  if (!c) return;
+  asegurarSesionesPlanificadas(c);
+  sincronizarEventosFacturacion(c);
+}
+
 function actualizarCliente(patch, id = clienteActivo) {
   const idx = clientes.findIndex((c) => c.id === id);
   if (idx === -1) return;
   clientes[idx] = { ...clientes[idx], ...patch };
-  sincronizarClienteEquipo(clientes[idx]);
+  sincronizarClienteDerivados(clientes[idx]);
   debounceGuardar(id);
   renderLista();
   refrescarVistaGeneral();
@@ -489,6 +498,8 @@ function leerDatosFormulario() {
     nombre: $('#nombre')?.value || '',
     bono,
     mesContratacion: $('#mes-contratacion')?.value || '',
+    fechaContratacion: $('#fecha-contratacion')?.value || '',
+    fechaRenovacionPrevista: $('#fecha-renovacion')?.value || '',
     sesionesTotal: Number($('#sesiones-total')?.value) || 0,
     confirmacionHorario: Boolean($('#confirmacion-horario')?.checked),
     horarioNotas: $('#horario-notas')?.value || '',
@@ -514,7 +525,7 @@ async function guardarClienteCompleto(opts = {}) {
   if (idx === -1) return false;
 
   clientes[idx] = { ...clientes[idx], ...patch };
-  sincronizarClienteEquipo(clientes[idx]);
+  sincronizarClienteDerivados(clientes[idx]);
   await persistirCliente(id);
 
   const titulo = $('#form-title');
@@ -809,9 +820,145 @@ function contarPendientes(items) {
 }
 
 function resumenSesiones(c) {
-  const done = c.sesiones.filter((s) => s.done).length;
-  const total = c.sesiones.length;
-  return { done, total, pendientes: total - done };
+  const done = (c.sesiones || []).filter((s) => s.done).length;
+  const total = c.sesionesTotal > 0 ? c.sesionesTotal : (c.sesiones || []).length;
+  const pendientes = Math.max(0, total - done);
+  return { done, total, pendientes };
+}
+
+function obtenerFechaUltimaSesion(c) {
+  const fechas = (c.sesiones || [])
+    .map((s) => s.fecha)
+    .filter(Boolean)
+    .sort();
+  return fechas.length ? fechas[fechas.length - 1] : '';
+}
+
+function fechaRenovacionEfectiva(c) {
+  return c.fechaRenovacionPrevista || obtenerFechaUltimaSesion(c) || '';
+}
+
+function asegurarSesionesPlanificadas(c) {
+  if (!c) return;
+  const total = Math.max(0, Number(c.sesionesTotal) || 0);
+  if (!Array.isArray(c.sesiones)) c.sesiones = [];
+  while (c.sesiones.length < total) {
+    c.sesiones.push({
+      text: `Sesión ${c.sesiones.length + 1}`,
+      done: false,
+      fecha: ''
+    });
+  }
+}
+
+function quitarEventosAutoPorTipo(cliente, tipo) {
+  Object.keys(cliente.calendario || {}).forEach((fecha) => {
+    const evs = eventosDelDia(cliente.calendario, fecha);
+    const rest = evs.filter((ev) => !(ev.autoFacturacion && ev.tipo === tipo));
+    if (rest.length) cliente.calendario[fecha] = rest;
+    else delete cliente.calendario[fecha];
+  });
+}
+
+function establecerEventoAuto(cliente, fecha, tipo, detalle) {
+  if (!fecha || !tipo) return;
+  quitarEventosAutoPorTipo(cliente, tipo);
+  const eventos = eventosDelDia(cliente.calendario, fecha);
+  eventos.push({ tipo, detalle: detalle || '', hora: '', autoFacturacion: true });
+  cliente.calendario[fecha] = eventos;
+}
+
+function sincronizarEventosFacturacion(cliente) {
+  if (!cliente) return;
+  const coste = String(parseFloat(normalizarBono(cliente.bono).coste) || '');
+
+  quitarEventosAutoPorTipo(cliente, 'renovacion-pagada');
+  quitarEventosAutoPorTipo(cliente, 'renovacion-probable');
+
+  if (cliente.fechaContratacion && coste) {
+    establecerEventoAuto(cliente, cliente.fechaContratacion, 'renovacion-pagada', coste);
+  }
+
+  const fechaRenov = fechaRenovacionEfectiva(cliente);
+  if (fechaRenov && coste) {
+    establecerEventoAuto(cliente, fechaRenov, 'renovacion-probable', coste);
+  }
+
+  sincronizarClienteEquipo(cliente);
+}
+
+function parseHoraMinutos(hora) {
+  if (!hora || typeof hora !== 'string') return null;
+  const m = hora.trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  const h = parseInt(m[1], 10);
+  const min = parseInt(m[2], 10);
+  if (h < 0 || h > 23 || min < 0 || min > 59) return null;
+  return h * 60 + min;
+}
+
+function duracionMinutosEvento(ev, cliente) {
+  const fromDetalle = parseMinutos(ev?.detalle, 0);
+  if (fromDetalle > 0) return fromDetalle;
+  const bono = normalizarBono(cliente?.bono);
+  return parseInt(bono.duracionMinutos, 10) || 60;
+}
+
+function eventoRequiereHorario(tipo) {
+  return tipo === 'entrenamiento' || tipo === 'reserva';
+}
+
+function clientesParaSolapamiento() {
+  if (vistaActual === 'equipo' && equipoPaso === 'miembro' && miembroEquipoActivo) {
+    return clientesVistaMiembro();
+  }
+  return clientes;
+}
+
+function buscarSolapamientosHorario({ fecha, hora, duracionMin, clienteId, eventoIdx = null }) {
+  if (!fecha || !hora) return [];
+  const inicio = parseHoraMinutos(hora);
+  if (inicio == null) return [];
+  const fin = inicio + (duracionMin || 60);
+  const solapes = [];
+
+  clientesParaSolapamiento().forEach((cl) => {
+    eventosDelDia(cl.calendario, fecha).forEach((ev, idx) => {
+      if (!eventoRequiereHorario(ev.tipo) || !ev.hora) return;
+      if (cl.id === clienteId && idx === eventoIdx) return;
+      const evInicio = parseHoraMinutos(ev.hora);
+      if (evInicio == null) return;
+      const evFin = evInicio + duracionMinutosEvento(ev, cl);
+      if (inicio < evFin && fin > evInicio) {
+        solapes.push({
+          clienteId: cl.id,
+          clienteNombre: nombreCompleto(cl),
+          hora: ev.hora,
+          tipo: ev.tipo,
+          eventoIdx: idx
+        });
+      }
+    });
+  });
+
+  return solapes;
+}
+
+function htmlSesionesOverview(c) {
+  const ses = resumenSesiones(c);
+  const pendientes = (c.sesiones || []).filter((s) => !s.done);
+  const pillClass = ses.pendientes === 0 && ses.total > 0 ? 'ok' : ses.pendientes > 0 ? 'warn' : '';
+  let html = `<span class="progress-pill ${pillClass}">${ses.done}/${ses.total}</span>`;
+  if (pendientes.length) {
+    const items = pendientes.slice(0, 4).map((s) => {
+      const txt = esc(s.text || 'Sesión');
+      const fecha = s.fecha ? ` <span class="sesion-fecha-mini">${esc(s.fecha)}</span>` : '';
+      return `<li>${txt}${fecha}</li>`;
+    }).join('');
+    const mas = pendientes.length > 4 ? `<li class="sesiones-overview-mas">+${pendientes.length - 4} más</li>` : '';
+    html += `<ul class="sesiones-overview-list">${items}${mas}</ul>`;
+  }
+  return html;
 }
 
 function parseMes(mesStr) {
@@ -835,7 +982,8 @@ function migrarCalendario(calendario = {}) {
       out[fecha] = val
         .map((ev) => ({
           tipo: ev?.tipo || 'entrenamiento',
-          detalle: ev?.detalle || ''
+          detalle: ev?.detalle || '',
+          hora: ev?.hora || ''
         }))
         .filter((ev) => TIPOS_EVENTO[ev.tipo]);
       if (!out[fecha].length) delete out[fecha];
@@ -913,17 +1061,34 @@ function calcularFacturacionMes(userId, mesKey) {
 
   lista.forEach((c) => {
     const bono = normalizarBono(c.bono);
-    if (bono.modalidad && c.mesContratacion === mesKey) {
-      prevista += parseFloat(bono.coste) || 0;
-    }
+    const costeBono = parseFloat(bono.coste) || 0;
+    let realContratoEnMes = false;
+    let prevRenovEnMes = false;
+
     Object.keys(c.calendario || {}).forEach((fecha) => {
       if (!fecha.startsWith(mesKey)) return;
       eventosDelDia(c.calendario, fecha).forEach((ev) => {
         const importe = importeDesdeCliente(c, ev);
-        if (ev.tipo === 'renovacion-pagada') real += importe;
-        if (ev.tipo === 'renovacion-probable') prevista += importe;
+        if (ev.tipo === 'renovacion-pagada') {
+          real += importe;
+          realContratoEnMes = true;
+        }
+        if (ev.tipo === 'renovacion-probable') {
+          prevista += importe;
+          prevRenovEnMes = true;
+        }
       });
     });
+
+    const fechaCont = c.fechaContratacion || (c.mesContratacion ? `${c.mesContratacion}-01` : '');
+    if (!realContratoEnMes && bono.modalidad && fechaCont.startsWith(mesKey)) {
+      real += costeBono;
+    }
+
+    const fechaRenov = fechaRenovacionEfectiva(c);
+    if (!prevRenovEnMes && bono.modalidad && fechaRenov.startsWith(mesKey)) {
+      prevista += costeBono;
+    }
   });
 
   return { real, prevista };
@@ -1243,7 +1408,6 @@ function renderDashboardMiembro() {
   tbody.innerHTML = '';
 
   filtrados.forEach((c) => {
-    const ses = resumenSesiones(c);
     const ejPend = contarPendientes(c.ejercicios);
     const pePend = contarPendientes(c.pesos);
     const bonoTxt = textoBono(c.bono);
@@ -1254,11 +1418,7 @@ function renderDashboardMiembro() {
       <td class="cell-name cliente-perfil"><strong>${esc(nombreCompleto(c))}</strong></td>
       <td class="cell-bono">${esc(bonoTxt)}</td>
       <td class="cell-cal">${miniCalendarioHTML(c)}</td>
-      <td class="cell-sesiones">
-        <span class="progress-pill ${ses.pendientes === 0 && ses.total > 0 ? 'ok' : ses.pendientes > 0 ? 'warn' : ''}">
-          ${ses.done}/${ses.total}
-        </span>
-      </td>
+      <td class="cell-sesiones cell-sesiones-overview">${htmlSesionesOverview(c)}</td>
       <td class="cell-check">${statusChip(c.confirmacionHorario)}</td>
       <td class="cell-check">${statusChip(c.pdf1.entregado)}</td>
       <td class="cell-check">${statusChip(c.pdf2.entregado)}</td>
@@ -1519,11 +1679,28 @@ function textoBono(bono) {
 }
 
 function normalizarCliente(c) {
-  return {
+  const mes = c.mesContratacion || '';
+  let fechaContratacion = c.fechaContratacion || '';
+  if (!fechaContratacion && mes) fechaContratacion = `${mes}-01`;
+  const mesContratacion = fechaContratacion ? fechaContratacion.slice(0, 7) : mes;
+  const sesiones = (c.sesiones || []).map((s) => ({
+    text: s.text || '',
+    done: Boolean(s.done),
+    fecha: s.fecha || ''
+  }));
+  const out = {
     ...c,
     bono: normalizarBono(c.bono),
+    mesContratacion,
+    fechaContratacion,
+    fechaRenovacionPrevista: c.fechaRenovacionPrevista || '',
+    sesiones,
+    sesionesTotal: Number(c.sesionesTotal) || 0,
     calendario: migrarCalendario(c.calendario)
   };
+  asegurarSesionesPlanificadas(out);
+  sincronizarEventosFacturacion(out);
+  return out;
 }
 
 function actualizarCamposBonoUI(modalidad) {
@@ -1570,9 +1747,13 @@ function tamanoNucleoEventos(n, compact = false) {
 function lineaEvento(ev, incluirCliente = false) {
   const meta = TIPOS_EVENTO[ev.tipo];
   const etiqueta = meta?.label || ev.tipo;
-  const detalle = ev.detalle ? ` ${ev.detalle}` : '';
   const prefijo = incluirCliente && ev.clienteNombre ? `${ev.clienteNombre}: ` : '';
-  return `${prefijo}${etiqueta}${detalle}`;
+  const partes = [prefijo + etiqueta];
+  if (eventoRequiereHorario(ev.tipo)) {
+    partes.push(ev.hora ? `— ${ev.hora}` : '— (sin horario)');
+  }
+  if (ev.detalle) partes.push(`· ${ev.detalle}`);
+  return partes.join(' ');
 }
 
 function ensureCalTooltip() {
@@ -1890,10 +2071,16 @@ function toggleEventoDia(cliente, fecha, tipo, detalle) {
   }
 }
 
-function añadirEventoDia(cliente, fecha, tipo, detalle) {
+function añadirEventoDia(cliente, fecha, tipo, detalle, extras = {}) {
+  const hora = extras.hora || '';
+  if (eventoRequiereHorario(tipo) && !hora && !extras.autoFacturacion) {
+    abrirModalEvento(fecha, tipo, cliente);
+    return false;
+  }
   const eventos = eventosDelDia(cliente.calendario, fecha);
-  eventos.push({ tipo, detalle: detalle || '' });
+  eventos.push({ tipo, detalle: detalle || '', hora, ...extras });
   cliente.calendario[fecha] = eventos;
+  return true;
 }
 
 function obtenerClientePorId(id) {
@@ -1926,10 +2113,10 @@ function eliminarEventoDia(cliente, fecha, index) {
   refrescarVistaGeneral();
 }
 
-function editarEventoDia(cliente, fecha, index, detalle) {
+function editarEventoDia(cliente, fecha, index, detalle, extras = {}) {
   const eventos = eventosDelDia(cliente.calendario, fecha);
   if (index < 0 || index >= eventos.length) return;
-  eventos[index] = { ...eventos[index], detalle: detalle || '' };
+  eventos[index] = { ...eventos[index], detalle: detalle || '', ...extras };
   cliente.calendario[fecha] = eventos;
   sincronizarClienteEquipo(cliente);
   debounceGuardar(cliente.id);
@@ -2121,7 +2308,7 @@ function enlazarCeldaCalendarioGlobal(cell, fecha, opts = {}) {
   const clientesLista = opts.clientesLista || null;
 
   cell.addEventListener('click', () => {
-    if (arrastreEventoActivo?.moved) return;
+    if (clickCalendarioSuprimido() || arrastreEventoActivo?.moved) return;
     if (tipoActivo === 'borrar') {
       borrarDiaCalendario(fecha, { global: true });
       return;
@@ -2145,7 +2332,7 @@ function asegurarLeyendaGlobal() {
 const EVENTO_MODAL_AYUDA = {
   'renovacion-pagada': { label: 'Importe pagado (€)', placeholder: 'Ej. 120', hint: 'Importe ya cobrado por renovación.' },
   'renovacion-probable': { label: 'Importe previsto (€)', placeholder: 'Ej. 120', hint: 'Importe esperado de renovación.' },
-  entrenamiento: { label: 'Duración / notas', placeholder: 'Ej. 45 minutos', hint: 'Duración de la sesión u observaciones.' },
+  entrenamiento: { label: 'Duración / notas', placeholder: 'Ej. 45 minutos', hint: 'Indica la hora arriba. Si coincide con otro entrenamiento, se te avisará.' },
   'valoracion-entrenamiento': { label: 'Notas de valoración', placeholder: 'Ej. Revisión técnica', hint: 'Detalle de la valoración.' },
   reserva: { label: 'Detalle de reserva', placeholder: 'Ej. Reserva mañana', hint: '' },
   baja: { label: 'Motivo / notas', placeholder: 'Ej. Baja temporal', hint: '' },
@@ -2183,9 +2370,10 @@ function cerrarModalEvento() {
   eventoModalPendiente = null;
 }
 
-function rellenarModalEvento({ fecha, tipo, cl, detalleValor, tituloTexto, guardarTexto, modo }) {
+function rellenarModalEvento({ fecha, tipo, cl, detalleValor, horaValor, tituloTexto, guardarTexto, modo }) {
   const meta = TIPOS_EVENTO[tipo];
   const ayuda = EVENTO_MODAL_AYUDA[tipo] || { label: 'Detalle', placeholder: 'Información del evento', hint: '' };
+  const requiereHora = eventoRequiereHorario(tipo);
 
   const modal = $('#evento-modal');
   const titulo = $('#evento-modal-title');
@@ -2193,7 +2381,10 @@ function rellenarModalEvento({ fecha, tipo, cl, detalleValor, tituloTexto, guard
   const label = $('#evento-modal-label');
   const hint = $('#evento-modal-hint');
   const detalle = $('#evento-modal-detalle');
+  const horaWrap = $('#evento-modal-hora-wrap');
+  const horaInput = $('#evento-modal-hora');
   const btnGuardar = $('#evento-modal-guardar');
+  const solapeEl = $('#evento-modal-solape');
 
   if (titulo) titulo.textContent = tituloTexto || meta?.label || 'Evento';
   if (fechaEl) fechaEl.textContent = fechaLegible(fecha);
@@ -2206,11 +2397,69 @@ function rellenarModalEvento({ fecha, tipo, cl, detalleValor, tituloTexto, guard
     detalle.placeholder = ayuda.placeholder;
     detalle.value = detalleValor ?? '';
   }
+  horaWrap?.classList.toggle('hidden', !requiereHora);
+  if (horaInput) {
+    horaInput.required = requiereHora;
+    horaInput.value = horaValor ?? '';
+  }
+  if (solapeEl) {
+    solapeEl.textContent = '';
+    solapeEl.classList.add('hidden');
+  }
   if (btnGuardar) btnGuardar.textContent = guardarTexto || 'Añadir evento';
   modal?.classList.toggle('evento-modal-editar', modo === 'editar');
   modal?.classList.remove('hidden');
-  detalle?.focus();
-  detalle?.select?.();
+  (requiereHora ? horaInput : detalle)?.focus();
+}
+
+function tituloModalEvento(tipo, modo) {
+  const meta = TIPOS_EVENTO[tipo];
+  if (tipo === 'entrenamiento') {
+    return modo === 'editar' ? 'Editar horario de entrenamiento' : 'Horario de entrenamiento';
+  }
+  if (tipo === 'reserva') {
+    return modo === 'editar' ? 'Editar horario de reserva' : 'Horario de reserva';
+  }
+  return modo === 'editar' ? `Editar: ${meta?.label || tipo}` : (meta?.label || 'Nuevo evento');
+}
+
+function actualizarAvisoSolapeModal() {
+  const solapeEl = $('#evento-modal-solape');
+  if (!eventoModalPendiente || !solapeEl) return;
+
+  const { fecha, tipo, clienteId, modo, eventoIdx } = eventoModalPendiente;
+  if (!eventoRequiereHorario(tipo)) {
+    solapeEl.classList.add('hidden');
+    solapeEl.textContent = '';
+    return;
+  }
+
+  const hora = $('#evento-modal-hora')?.value?.trim() || '';
+  if (!hora) {
+    solapeEl.classList.add('hidden');
+    solapeEl.textContent = '';
+    return;
+  }
+
+  const cl = obtenerClientePorId(clienteId);
+  if (!cl) return;
+
+  const detalle = $('#evento-modal-detalle')?.value?.trim() || '';
+  const solapes = buscarSolapamientosHorario({
+    fecha,
+    hora,
+    duracionMin: duracionMinutosEvento({ tipo, detalle }, cl),
+    clienteId: cl.id,
+    eventoIdx: modo === 'editar' ? eventoIdx : null
+  });
+
+  if (solapes.length) {
+    solapeEl.textContent = `Solape de horario con: ${solapes.map((s) => `${s.clienteNombre} (${s.hora})`).join(', ')}`;
+    solapeEl.classList.remove('hidden');
+  } else {
+    solapeEl.classList.add('hidden');
+    solapeEl.textContent = '';
+  }
 }
 
 function abrirModalEvento(fecha, tipo, cliente = null) {
@@ -2218,23 +2467,24 @@ function abrirModalEvento(fecha, tipo, cliente = null) {
   if (!cl || !tipo || tipo === 'borrar') return;
 
   eventoModalPendiente = { fecha, tipo, clienteId: cl.id, modo: 'crear' };
-  const meta = TIPOS_EVENTO[tipo];
   rellenarModalEvento({
     fecha,
     tipo,
     cl,
     detalleValor: detalleSugeridoEvento(tipo, cl),
-    tituloTexto: meta?.label || 'Nuevo evento',
+    tituloTexto: tituloModalEvento(tipo, 'crear'),
     guardarTexto: 'Añadir evento',
     modo: 'crear'
   });
+  actualizarAvisoSolapeModal();
 }
 
 function abrirModalEditarEvento(fecha, tipo, detalleActual, opts = {}) {
-  const { clienteId = null, eventoIdx } = opts;
+  const { clienteId = null, eventoIdx, horaActual = '' } = opts;
   const cl = clienteId ? obtenerClientePorId(clienteId) : obtenerCliente();
   if (!cl || !tipo || eventoIdx == null) return;
 
+  const ev = eventosDelDia(cl.calendario, fecha)[eventoIdx];
   eventoModalPendiente = { fecha, tipo, clienteId: cl.id, eventoIdx, modo: 'editar' };
   const meta = TIPOS_EVENTO[tipo];
   rellenarModalEvento({
@@ -2242,10 +2492,12 @@ function abrirModalEditarEvento(fecha, tipo, detalleActual, opts = {}) {
     tipo,
     cl,
     detalleValor: detalleActual,
-    tituloTexto: `Editar: ${meta?.label || tipo}`,
+    horaValor: horaActual || ev?.hora || '',
+    tituloTexto: tituloModalEvento(tipo, 'editar'),
     guardarTexto: 'Guardar cambios',
     modo: 'editar'
   });
+  actualizarAvisoSolapeModal();
 }
 
 function confirmarModalEvento() {
@@ -2257,13 +2509,40 @@ function confirmarModalEvento() {
 
   const { fecha, tipo, modo, eventoIdx } = eventoModalPendiente;
   const detalle = $('#evento-modal-detalle')?.value?.trim() || '';
+  const requiereHora = eventoRequiereHorario(tipo);
+  const hora = requiereHora ? ($('#evento-modal-hora')?.value?.trim() || '') : '';
+
+  if (requiereHora && !hora) {
+    toast('Indica la hora del entrenamiento', 3000);
+    $('#evento-modal-hora')?.focus();
+    return;
+  }
+
+  const duracionMin = duracionMinutosEvento({ tipo, detalle }, cl);
+  const solapes = requiereHora
+    ? buscarSolapamientosHorario({
+      fecha,
+      hora,
+      duracionMin,
+      clienteId: cl.id,
+      eventoIdx: modo === 'editar' ? eventoIdx : null
+    })
+    : [];
+
+  if (solapes.length) {
+    const lista = solapes.map((s) => `${s.clienteNombre} (${s.hora})`).join(', ');
+    if (!confirm(`Solape de horario con: ${lista}.\n\n¿Quieres añadirlo igualmente?`)) return;
+  }
+
+  const extras = requiereHora ? { hora } : {};
 
   if (modo === 'editar') {
-    editarEventoDia(cl, fecha, eventoIdx, detalle);
+    editarEventoDia(cl, fecha, eventoIdx, detalle, extras);
     toast('Evento actualizado', 2000);
+  } else if (añadirEventoDia(cl, fecha, tipo, detalle, extras)) {
+    toast(eventoRequiereHorario(tipo) ? 'Entrenamiento programado' : 'Evento añadido', 2000);
   } else {
-    añadirEventoDia(cl, fecha, tipo, detalle);
-    toast('Evento añadido', 2000);
+    return;
   }
 
   sincronizarClienteEquipo(cl);
@@ -2280,12 +2559,17 @@ function modoDesdeClicLegend(e, item) {
 }
 
 function insertarEventoEnCalendario(fecha, tipo, opts = {}) {
-  const { global = false, modo = modoInsercionEvento, clienteId = null } = opts;
+  const { modo = modoInsercionEvento, clienteId = null } = opts;
   if (!tipo || tipo === 'borrar') return;
 
   const cl = clienteId ? obtenerClientePorId(clienteId) : obtenerCliente();
   if (!cl) {
     toast('Asigna un cliente manteniendo el evento sobre su nombre', 3500);
+    return;
+  }
+
+  if (eventoRequiereHorario(tipo)) {
+    abrirModalEvento(fecha, tipo, cl);
     return;
   }
 
@@ -2316,6 +2600,11 @@ function borrarDiaCalendario(fecha, opts = { global: false }) {
 }
 
 let arrastreEventoActivo = null;
+let suprimirClickCalendarioHasta = 0;
+
+function clickCalendarioSuprimido() {
+  return Date.now() < suprimirClickCalendarioHasta;
+}
 
 function mitadLegendDesdeClic(e, item) {
   return modoDesdeClicLegend(e, item) === 'rapido' ? 'izquierda' : 'derecha';
@@ -2350,6 +2639,12 @@ function renderPickerClientesLista() {
     li.className = 'evento-picker-cliente';
     li.dataset.clienteId = c.id;
     li.innerHTML = `<span class="evento-picker-nombre">${esc(nombreCompleto(c))}</span>`;
+    li.addEventListener('pointerup', (ev) => {
+      if (!arrastreEventoActivo || arrastreEventoActivo.clienteId) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      asignarClienteArrastre(c.id);
+    });
     list.appendChild(li);
   });
 }
@@ -2442,9 +2737,10 @@ function actualizarHoverPickerClientes(x, y) {
       arrastreEventoActivo.hoverClienteId = row.dataset.clienteId;
       arrastreEventoActivo.hoverClienteRow = row;
       row.classList.add('asignando');
+      const delayAsignar = ('ontouchstart' in window || navigator.maxTouchPoints > 0) ? 280 : 500;
       arrastreEventoActivo.pickerHoverTimer = setTimeout(() => {
         asignarClienteArrastre(row.dataset.clienteId);
-      }, 500);
+      }, delayAsignar);
     }
   } else {
     limpiarHoverPickerClientes();
@@ -2511,8 +2807,18 @@ function actualizarDestinoCalendarioArrastre(x, y) {
 
 function finalizarArrastreEvento(e) {
   if (!arrastreEventoActivo) return;
-  const { tipo, item, moved, ghost, hoverCell, clienteId, modoInsercion } = arrastreEventoActivo;
+  const { tipo, item, moved, ghost, hoverCell, modoInsercion } = arrastreEventoActivo;
+  let { clienteId } = arrastreEventoActivo;
   try { item?.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+
+  if (moved && !clienteId) {
+    const x = arrastreEventoActivo.lastX ?? e.clientX;
+    const y = arrastreEventoActivo.lastY ?? e.clientY;
+    const row = filaPickerClienteEnPunto(x, y);
+    if (row?.dataset.clienteId) asignarClienteArrastre(row.dataset.clienteId);
+    clienteId = arrastreEventoActivo.clienteId;
+  }
+
   ghost?.remove();
   item?.classList.remove('dragging');
   limpiarDropTargets();
@@ -2520,13 +2826,15 @@ function finalizarArrastreEvento(e) {
   cerrarPickerClientes();
 
   if (moved && hoverCell?.dataset.fecha) {
+    suprimirClickCalendarioHasta = Date.now() + 450;
     if (!clienteId) {
-      toast('Mantén el evento sobre un cliente 0,5 s antes de soltarlo en el calendario', 3500);
+      toast('Toca un cliente en la lista o mantén el evento sobre su nombre antes de soltarlo', 3500);
     } else {
       const esGlobal = hoverCell.classList.contains('global-day-cell');
+      const modoFinal = eventoRequiereHorario(tipo) ? 'detallado' : (modoInsercion || modoInsercionEvento);
       insertarEventoEnCalendario(hoverCell.dataset.fecha, tipo, {
         global: esGlobal,
-        modo: modoInsercion || modoInsercionEvento,
+        modo: modoFinal,
         clienteId
       });
     }
@@ -2542,7 +2850,8 @@ function iniciarArrastreEvento(e, item, tipo) {
   e.preventDefault();
   try { item.setPointerCapture(e.pointerId); } catch { /* ignore */ }
 
-  const modoInsercion = modoDesdeClicLegend(e, item);
+  let modoInsercion = modoDesdeClicLegend(e, item);
+  if (eventoRequiereHorario(tipo)) modoInsercion = 'detallado';
   const mitadLegend = mitadLegendDesdeClic(e, item);
 
   const ghost = crearGhostArrastre(tipo);
@@ -2590,7 +2899,7 @@ function enlazarCeldaCalendario(cell, fecha) {
   cell.dataset.fecha = fecha;
 
   cell.addEventListener('click', () => {
-    if (arrastreEventoActivo?.moved) return;
+    if (clickCalendarioSuprimido() || arrastreEventoActivo?.moved) return;
     if (tipoActivo === 'borrar') {
       borrarDiaCalendario(fecha);
       return;
@@ -2755,7 +3064,6 @@ function renderDashboard() {
   tbody.innerHTML = '';
 
   filtrados.forEach((c) => {
-    const ses = resumenSesiones(c);
     const ejPend = contarPendientes(c.ejercicios);
     const pePend = contarPendientes(c.pesos);
     const bonoTxt = textoBono(c.bono);
@@ -2766,11 +3074,7 @@ function renderDashboard() {
       <td class="cell-name cliente-perfil"><strong>${esc(nombreCompleto(c))}</strong></td>
       <td class="cell-bono">${esc(bonoTxt)}</td>
       <td class="cell-cal">${miniCalendarioHTML(c)}</td>
-      <td class="cell-sesiones">
-        <span class="progress-pill ${ses.pendientes === 0 && ses.total > 0 ? 'ok' : ses.pendientes > 0 ? 'warn' : ''}">
-          ${ses.done}/${ses.total}
-        </span>
-      </td>
+      <td class="cell-sesiones cell-sesiones-overview">${htmlSesionesOverview(c)}</td>
       <td class="cell-check">${statusChip(c.confirmacionHorario)}</td>
       <td class="cell-check">${statusChip(c.pdf1.entregado)}</td>
       <td class="cell-check">${statusChip(c.pdf2.entregado)}</td>
@@ -2849,6 +3153,8 @@ function renderFormulario() {
   $('#bono-duracion').value = bono.duracionMinutos;
   $('#bono-coste').value = bono.coste;
   actualizarCamposBonoUI(bono.modalidad);
+  $('#fecha-contratacion').value = c.fechaContratacion || '';
+  $('#fecha-renovacion').value = c.fechaRenovacionPrevista || '';
   $('#mes-contratacion').value = c.mesContratacion;
   $('#sesiones-total').value = c.sesionesTotal || '';
   $('#confirmacion-horario').checked = c.confirmacionHorario;
@@ -2898,6 +3204,23 @@ function renderTodoList(containerId, items, field, showRemove) {
 
     li.appendChild(cb);
     li.appendChild(input);
+
+    if (field === 'sesiones') {
+      const dateInput = document.createElement('input');
+      dateInput.type = 'date';
+      dateInput.className = 'todo-sesion-fecha';
+      dateInput.value = item.fecha || '';
+      dateInput.title = 'Fecha planificada de la sesión';
+      dateInput.addEventListener('change', () => {
+        const cl = obtenerCliente();
+        cl[field][i].fecha = dateInput.value;
+        sincronizarClienteDerivados(cl);
+        debounceGuardar(cl.id);
+        if (cl.id === clienteActivo) renderCalendario(cl);
+        refrescarVistaGeneral();
+      });
+      li.appendChild(dateInput);
+    }
 
     if (showRemove) {
       const rm = document.createElement('button');
@@ -3011,7 +3334,9 @@ function renderCalendario(c, opts = {}) {
 function añadirTodoItem(field, defaultText) {
   const c = obtenerCliente();
   if (!c) return;
-  c[field].push({ text: defaultText || '', done: false });
+  const item = { text: defaultText || '', done: false };
+  if (field === 'sesiones') item.fecha = '';
+  c[field].push(item);
   debounceGuardar(c.id);
   renderFormulario();
 }
@@ -3033,7 +3358,11 @@ function vincularCampos() {
     ['#bono-sesiones-semana', (v, c) => ({ bono: { ...normalizarBono(c.bono), sesionesSemanales: v } })],
     ['#bono-duracion', (v, c) => ({ bono: { ...normalizarBono(c.bono), duracionMinutos: v } })],
     ['#bono-coste', (v, c) => ({ bono: { ...normalizarBono(c.bono), coste: v } })],
-    ['#mes-contratacion', (v) => ({ mesContratacion: v })],
+    ['#fecha-contratacion', (v) => ({
+      fechaContratacion: v,
+      mesContratacion: v ? v.slice(0, 7) : ''
+    })],
+    ['#fecha-renovacion', (v) => ({ fechaRenovacionPrevista: v })],
     ['#sesiones-total', (v) => ({ sesionesTotal: Number(v) || 0 })],
     ['#confirmacion-horario', (v) => ({ confirmacionHorario: v })],
     ['#horario-notas', (v) => ({ horarioNotas: v })],
@@ -3055,7 +3384,14 @@ function vincularCampos() {
       if (sel === '#apellidos' || sel === '#nombre') {
         $('#form-title').textContent = nombreCompleto(obtenerCliente());
       }
-      if (sel === '#mes-contratacion') renderCalendario(obtenerCliente());
+      if (sel === '#sesiones-total') {
+        const cl = obtenerCliente();
+        renderTodoList('sesiones-list', cl.sesiones, 'sesiones', !clienteLecturaEquipo);
+        actualizarProgresoSesiones(cl);
+      }
+      if (sel === '#fecha-contratacion' || sel === '#fecha-renovacion' || sel === '#bono-coste') {
+        renderCalendario(obtenerCliente());
+      }
     });
   });
 }
@@ -3142,6 +3478,8 @@ function initLeyenda() {
         confirmarModalEvento();
       }
     });
+    $('#evento-modal-hora')?.addEventListener('input', actualizarAvisoSolapeModal);
+    $('#evento-modal-hora')?.addEventListener('change', actualizarAvisoSolapeModal);
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && !$('#evento-modal')?.classList.contains('hidden')) {
         cerrarModalEvento();
@@ -3953,48 +4291,6 @@ function initBotones() {
     renderLista();
   });
 
-  on('#btn-exportar', 'click', () => {
-    const blob = new Blob([JSON.stringify(clientes, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `cuzco-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  });
-
-  on('#input-importar', 'change', async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = async () => {
-      try {
-        const data = JSON.parse(reader.result);
-        if (!Array.isArray(data)) throw new Error();
-
-        if (clientes.length && !confirm('¿Importar y fusionar con tus clientes actuales?')) return;
-
-        for (const item of data) {
-          const nuevo = normalizarCliente({ ...clienteVacio(), ...item, id: uid() });
-          clientes.push(nuevo);
-          if (modoLocal) {
-            guardarClientesLocal();
-          } else if (sb && usuario) {
-            const { id, ...payload } = nuevo;
-            await sb.from('clientes').insert({ id, user_id: usuario.id, data: payload });
-          }
-        }
-
-        if (modoLocal) guardarClientesLocal();
-        renderTodo();
-        toast(`${data.length} clientes importados`);
-      } catch {
-        toast('Archivo no válido');
-      }
-    };
-    reader.readAsText(file);
-    e.target.value = '';
-  });
 }
 
 async function init() {

@@ -1997,6 +1997,7 @@ body {
   padding: 0.35rem 0;
   overflow-y: auto;
   flex: 1;
+  pointer-events: auto;
 }
 
 .evento-picker-cliente {
@@ -2081,7 +2082,7 @@ body {
 .evento-modal {
   position: fixed;
   inset: 0;
-  z-index: 15000;
+  z-index: 18000;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2118,6 +2119,76 @@ body {
   font-size: 0.85rem;
   color: var(--text-muted);
   text-transform: capitalize;
+}
+
+.evento-modal-solape {
+  margin: 0 0 0.75rem;
+  font-size: 0.82rem;
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+}
+
+.evento-modal-solape.hidden {
+  display: none;
+}
+
+.cell-sesiones-overview {
+  min-width: 160px;
+}
+
+.sesiones-overview-list {
+  list-style: none;
+  margin: 0.35rem 0 0;
+  padding: 0;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+.sesiones-overview-list li + li {
+  margin-top: 0.15rem;
+}
+
+.sesiones-overview-mas {
+  font-style: italic;
+}
+
+.sesion-fecha-mini {
+  color: var(--accent);
+  font-size: 0.68rem;
+}
+
+.todo-item .todo-sesion-fecha {
+  flex: 0 0 auto;
+  width: 8.5rem;
+  font-size: 0.78rem;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: inherit;
+}
+
+@media (max-width: 900px) {
+  .overview-table td.cell-sesiones-overview {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .overview-table td.cell-sesiones-overview::before {
+    margin-bottom: 0.25rem;
+  }
+
+  .todo-item {
+    flex-wrap: wrap;
+  }
+
+  .todo-item .todo-sesion-fecha {
+    width: 100%;
+    margin-top: 0.25rem;
+  }
 }
 
 .evento-modal-hint {
@@ -2685,15 +2756,6 @@ body {
 
   .evento-cliente-picker {
     max-width: calc(100vw - 16px);
-  }
-
-  .sidebar-footer #btn-exportar,
-  .sidebar-footer .import-label {
-    display: none;
-  }
-
-  .sidebar-footer {
-    flex-direction: column;
   }
 
   .sidebar-footer #btn-logout {

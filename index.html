@@ -10,7 +10,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon.svg">
-  <link rel="stylesheet" href="styles.css?v=40">
+  <link rel="stylesheet" href="styles.css?v=43">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=DM+Serif+Display&display=swap" rel="stylesheet">
@@ -177,12 +177,7 @@
       <nav class="client-list" id="client-list" aria-label="Lista de clientes"></nav>
 
       <footer class="sidebar-footer">
-        <button type="button" class="btn btn-ghost btn-sm" id="btn-exportar">Exportar</button>
-        <label class="btn btn-ghost btn-sm import-label">
-          Importar
-          <input type="file" id="input-importar" accept=".json" hidden>
-        </label>
-        <button type="button" class="btn btn-ghost btn-sm" id="btn-logout">Cerrar sesión</button>
+        <button type="button" class="btn btn-ghost btn-sm btn-block" id="btn-logout">Cerrar sesión</button>
       </footer>
     </aside>
 
@@ -409,9 +404,18 @@
             <h3 class="section-title"><span class="section-num">3</span> Control de la contratación</h3>
             <div class="field-row calendar-controls">
               <div class="field">
-                <label for="mes-contratacion">Mes de contratación del periodo</label>
-                <input type="month" id="mes-contratacion">
+                <label for="fecha-contratacion">Fecha de contratación</label>
+                <input type="date" id="fecha-contratacion">
+                <p class="field-hint">La facturación real del mes de contrato usa esta fecha y el coste del bono.</p>
               </div>
+              <div class="field">
+                <label for="fecha-renovacion">Día previsto de renovación</label>
+                <input type="date" id="fecha-renovacion">
+                <p class="field-hint">Opcional. Si no se indica, se usa la fecha de la última sesión planificada.</p>
+              </div>
+            </div>
+            <input type="hidden" id="mes-contratacion">
+            <div class="field-row calendar-controls">
               <div class="field">
                 <label for="evento-detalle">Detalle del evento</label>
                 <input type="text" id="evento-detalle" placeholder="Ej. 30 minutos, entrega PDF…">
@@ -546,11 +550,16 @@
     <div class="evento-modal-card">
       <h3 class="evento-modal-title" id="evento-modal-title">Nuevo evento</h3>
       <p class="evento-modal-fecha" id="evento-modal-fecha"></p>
+      <div class="field hidden" id="evento-modal-hora-wrap">
+        <label for="evento-modal-hora">Hora del entrenamiento</label>
+        <input type="time" id="evento-modal-hora" step="300" autocomplete="off">
+      </div>
       <div class="field">
         <label for="evento-modal-detalle" id="evento-modal-label">Detalle</label>
         <input type="text" id="evento-modal-detalle" placeholder="Información del evento" autocomplete="off">
         <p class="evento-modal-hint hidden" id="evento-modal-hint"></p>
       </div>
+      <p class="evento-modal-solape hidden" id="evento-modal-solape" role="alert"></p>
       <div class="evento-modal-actions">
         <button type="button" class="btn btn-ghost" id="evento-modal-cancelar">Cancelar</button>
         <button type="button" class="btn btn-primary" id="evento-modal-guardar">Añadir evento</button>
@@ -560,6 +569,6 @@
 
   <script src="vendor/supabase.min.js?v=33"></script>
   <script src="config.js?v=33"></script>
-  <script src="app.js?v=34"></script>
+  <script src="app.js?v=37"></script>
 </body>
 </html>
